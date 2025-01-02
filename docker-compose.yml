@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  dicom_app:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      - DISPLAY=${DISPLAY}
+    network_mode: host
+    depends_on:
+      - db
+      - orthanc
+
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: dicom_db
+      POSTGRES_USER: dicom_user
+      POSTGRES_PASSWORD: dicom_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  orthanc:
+    image: jodogne/orthanc-plugins
+    ports:
+      - "4242:4242"  # DICOM
+      - "8042:8042"  # HTTP
+    volumes:
+      - orthanc_data:/var/lib/orthanc/db
+    environment:
+      ORTHANC__NAME: "Orthanc"
+      ORTHANC__DICOM_SERVER_ENABLED: "true"
+      ORTHANC__DICOM_MODALITIES_IN_DATABASE: "true"
+      ORTHANC__POSTGRES_ENABLED: "true"
+      ORTHANC__POSTGRES_HOST: "db"
+      ORTHANC__POSTGRES_DATABASE: "dicom_db"
+      ORTHANC__POSTGRES_USERNAME: "dicom_user"
+      ORTHANC__POSTGRES_PASSWORD: "dicom_password"
+
+volumes:
+  postgres_data:
+  orthanc_data:

@@ -1,0 +1,6 @@
+# requirements.txt
+pydicom==2.3.0
+pynetdicom==2.1.1
+psycopg2-binary==2.9.3
+pyorthanc==1.18.0
+#tkinter==8.6
