@@ -1,47 +1,58 @@
 # DICOM Connector
 
-![Python](https://img.shields.io/badge/Python-3.9%2B-blue?style=flat&logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=flat&logo=python&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-20.10%2B-blue?style=flat&logo=docker&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-Application for DICOM imaging pixel and metadata visualization. This tool provides a user-friendly interface for handling, viewing, and analyzing DICOM medical imaging files.
+A Tkinter desktop application for loading, transferring, and cataloging DICOM
+medical imaging files against a PACS (e.g. Orthanc).
 
 ## Features
 
 - DICOM file loading and parsing
-- Pixel data visualization
 - Metadata extraction and display
-- Network DICOM transfer support
-- Database storage for DICOM metadata
-- User-friendly GUI interface
+- Network DICOM transfer: C-ECHO, C-STORE, C-FIND, C-MOVE, and a Storage SCP
+- Orthanc REST API client
+- Database storage for DICOM metadata (PostgreSQL)
+- Tkinter GUI
+
+Planned (not yet implemented): pixel data visualization, a full DICOM tag
+browser, and anonymization before send.
 
 ## Project Structure
 
 ```
-dicom_app/
+connector/
 ├── Dockerfile
 ├── docker-compose.yml
-├── requirements.txt
-├── main.py
-├── config.py
-├── ui/
-│   ├── __init__.py
-│   ├── main_window.py
-│   └── file_viewer.py
-├── dicom/
-│   ├── __init__.py
-│   ├── file_handler.py
-│   └── network.py
-└── database/
+├── pyproject.toml
+├── uv.lock
+├── src/
+│   └── dicom_connector/
+│       ├── main.py
+│       ├── config.py
+│       ├── ui/
+│       │   ├── __init__.py
+│       │   └── main_window.py
+│       ├── dicom/
+│       │   ├── __init__.py
+│       │   ├── file_handler.py
+│       │   ├── network.py
+│       │   └── orthanc_api.py
+│       └── database/
+│           ├── __init__.py
+│           └── db_handler.py
+└── tests/
     ├── __init__.py
-    └── db_handler.py
+    └── test_orthanc_connection.py
 ```
 
 ## Prerequisites
 
-- Python 3.9 or higher
-- Docker 20.10 or higher
-- Docker Compose 2.0 or higher
+- Python 3.11 or higher
+- [uv](https://docs.astral.sh/uv/) for dependency management and running the app
+- Docker 20.10+ and Docker Compose 2.0+ (for the containerized setup)
+- A system Tk installation if running outside Docker (e.g. `python3-tk` on Debian/Ubuntu)
 
 ## Installation
 
@@ -53,12 +64,16 @@ git clone https://github.com/yourusername/dicom-connector.git
 cd dicom-connector
 ```
 
-2. Build and run the application using Docker Compose:
+2. Build and run the application, PostgreSQL, and an Orthanc PACS:
 ```bash
 docker compose up --build
 ```
 
-The application will be available at `http://localhost:8000`
+This is a desktop GUI application, not a web server - there is no
+`http://localhost:8000` to open. On Linux, the container displays its window
+on your host's X server (see `DISPLAY`/X11 notes in `docker-compose.yml`);
+run `xhost +local:docker` on the host first if the window fails to appear.
+Orthanc's web UI is reachable at `http://localhost:8042`.
 
 ### Manual Installation
 
@@ -68,75 +83,46 @@ git clone https://github.com/yourusername/dicom-connector.git
 cd dicom-connector
 ```
 
-2. Create and activate a virtual environment:
+2. Install dependencies with uv (creates and manages `.venv` for you):
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+uv sync
 ```
 
-3. Install dependencies:
+3. Run the application:
 ```bash
-pip install -r requirements.txt
-```
-
-4. Run the application:
-```bash
-python main.py
+uv run dicom-connector
+# or: uv run python -m dicom_connector.main
 ```
 
 ## Configuration
 
-The application can be configured by modifying the `config.py` file or using environment variables:
+The application is configured via `src/dicom_connector/config.py`, which
+reads its values from environment variables (see `.env.example`):
 
-```python
-# config.py
-DATABASE_URL = "postgresql://user:password@localhost:5432/dicom_db"
-DICOM_PORT = 11112
-DEBUG_MODE = False
-```
-
-Environment variables override the config file settings:
-- `DICOM_DB_URL`: Database connection string
-- `DICOM_PORT`: Port for DICOM network operations
-- `DEBUG`: Enable debug mode
+| Variable | Purpose | Default |
+|---|---|---|
+| `DICOM_PACS_HOST` | PACS DICOM host | `localhost` |
+| `DICOM_PACS_PORT` | PACS DICOM port | `4242` |
+| `DICOM_PACS_AE_TITLE` | Remote PACS AE title | `ORTHANC` |
+| `DICOM_CALLING_AE_TITLE` | This app's own AE title | `MYAETITLE` |
+| `DICOM_DB_NAME` / `_USER` / `_PASSWORD` / `_HOST` / `_PORT` | PostgreSQL connection | `dicom_db` / `dicom_user` / `dicom_password` / `db` / `5432` |
+| `ORTHANC_HTTP_URL` | Orthanc REST API base URL | `http://localhost:8042` |
+| `ORTHANC_HTTP_USERNAME` / `ORTHANC_HTTP_PASSWORD` | Orthanc REST API credentials | `orthanc` / `orthanc` |
 
 ## Docker Configuration
 
-The `docker-compose.yml` file includes the following services:
-
-```yaml
-version: '3.8'
-
-services:
-  app:
-    build: .
-    ports:
-      - "8000:8000"
-      - "11112:11112"
-    environment:
-      - DICOM_DB_URL=postgresql://user:password@db:5432/dicom_db
-    depends_on:
-      - db
-
-  db:
-    image: postgres:14
-    environment:
-      - POSTGRES_DB=dicom_db
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data:
-```
+`docker-compose.yml` runs three services: `dicom_app` (this application, on
+the host network so it can reach the DICOM/PACS ports directly), `db`
+(PostgreSQL), and `orthanc` (a PACS with its own PostgreSQL-backed index and
+storage). All credentials are environment-variable driven - copy
+`.env.example` to `.env` and change them before any real deployment.
 
 ## Usage
 
 1. Launch the application
-2. Use the File menu to open DICOM files or establish network connections
-3. View image data and metadata in the main window
-4. Use the toolbar for common operations like zoom, pan, and window/level adjustment
+2. Use **Browse** to select a `.dcm` file
+3. Use **Send to PACS** / **Receive from PACS** to transfer studies
+4. Check the log pane for status and errors
 
 ## Development
 
@@ -144,13 +130,19 @@ volumes:
 
 1. Create a new branch for your feature
 2. Implement the feature following the project structure
-3. Add tests in the appropriate test directory
+3. Add tests under `tests/`
 4. Submit a pull request
 
 ### Running Tests
 
 ```bash
-python -m pytest tests/
+uv run pytest tests/
+```
+
+### Linting
+
+```bash
+uv run ruff check src tests
 ```
 
 ## Contributing

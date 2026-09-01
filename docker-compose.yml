@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   dicom_app:
     build: .
@@ -9,6 +7,20 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix:ro
     environment:
       - DISPLAY=${DISPLAY}
+      - DICOM_PACS_HOST=${DICOM_PACS_HOST:-localhost}
+      - DICOM_PACS_PORT=${DICOM_PACS_PORT:-4242}
+      - DICOM_PACS_AE_TITLE=${DICOM_PACS_AE_TITLE:-ORTHANC}
+      - DICOM_CALLING_AE_TITLE=${DICOM_CALLING_AE_TITLE:-MYAETITLE}
+      - DICOM_DB_NAME=${DICOM_DB_NAME:-dicom_db}
+      - DICOM_DB_USER=${DICOM_DB_USER:-dicom_user}
+      - DICOM_DB_PASSWORD=${DICOM_DB_PASSWORD:?set DICOM_DB_PASSWORD in .env}
+      - DICOM_DB_HOST=${DICOM_DB_HOST:-db}
+      - DICOM_DB_PORT=${DICOM_DB_PORT:-5432}
+      - ORTHANC_HTTP_URL=${ORTHANC_HTTP_URL:-http://localhost:8042}
+      - ORTHANC_HTTP_USERNAME=${ORTHANC_HTTP_USERNAME:-orthanc}
+      - ORTHANC_HTTP_PASSWORD=${ORTHANC_HTTP_PASSWORD:?set ORTHANC_HTTP_PASSWORD in .env}
+    # network_mode: host is what lets DICOM_PACS_HOST/ORTHANC_HTTP_URL use
+    # "localhost" to reach the orthanc service's published ports below.
     network_mode: host
     depends_on:
       - db
@@ -17,14 +29,24 @@ services:
   db:
     image: postgres:13
     environment:
-      POSTGRES_DB: dicom_db
-      POSTGRES_USER: dicom_user
-      POSTGRES_PASSWORD: dicom_password
+      POSTGRES_DB: ${DICOM_DB_NAME:-dicom_db}
+      POSTGRES_USER: ${DICOM_DB_USER:-dicom_user}
+      POSTGRES_PASSWORD: ${DICOM_DB_PASSWORD:?set DICOM_DB_PASSWORD in .env}
+      # consumed by docker/postgres-init/init-orthanc-db.sh to create a
+      # second, separate database for orthanc below
+      ORTHANC_DB_USER: ${ORTHANC_DB_USER:-orthanc_user}
+      ORTHANC_DB_PASSWORD: ${ORTHANC_DB_PASSWORD:?set ORTHANC_DB_PASSWORD in .env}
+      ORTHANC_DB_NAME: ${ORTHANC_DB_NAME:-orthanc_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
 
+  # jodogne/orthanc-plugins is unmaintained and has no mechanism to read
+  # ORTHANC__* env vars at all - it just runs Orthanc against a static
+  # config file baked into the image. orthancteam/orthanc is the actively
+  # maintained image and is what implements that env-var convention.
   orthanc:
-    image: jodogne/orthanc-plugins
+    image: orthancteam/orthanc:latest
     ports:
       - "4242:4242"  # DICOM
       - "8042:8042"  # HTTP
@@ -32,13 +54,21 @@ services:
       - orthanc_data:/var/lib/orthanc/db
     environment:
       ORTHANC__NAME: "Orthanc"
+      ORTHANC__DICOM_AET: ${DICOM_PACS_AE_TITLE:-ORTHANC}
       ORTHANC__DICOM_SERVER_ENABLED: "true"
-      ORTHANC__DICOM_MODALITIES_IN_DATABASE: "true"
-      ORTHANC__POSTGRES_ENABLED: "true"
-      ORTHANC__POSTGRES_HOST: "db"
-      ORTHANC__POSTGRES_DATABASE: "dicom_db"
-      ORTHANC__POSTGRES_USERNAME: "dicom_user"
-      ORTHANC__POSTGRES_PASSWORD: "dicom_password"
+      ORTHANC__REMOTE_ACCESS_ALLOWED: "true"
+      # creates the 'orthanc' HTTP user with this password (see ORTHANC_HTTP_USERNAME/_PASSWORD in config.py)
+      ORTHANC_PASSWORD: ${ORTHANC_HTTP_PASSWORD:?set ORTHANC_HTTP_PASSWORD in .env}
+      # its own PostgreSQL index+storage - a separate database from the app's, created by
+      # docker/postgres-init/init-orthanc-db.sh on the db service above
+      ORTHANC__POSTGRESQL__ENABLE_INDEX: "true"
+      ORTHANC__POSTGRESQL__ENABLE_STORAGE: "true"
+      ORTHANC__POSTGRESQL__HOST: "db"
+      ORTHANC__POSTGRESQL__DATABASE: ${ORTHANC_DB_NAME:-orthanc_db}
+      ORTHANC__POSTGRESQL__USERNAME: ${ORTHANC_DB_USER:-orthanc_user}
+      ORTHANC__POSTGRESQL__PASSWORD: ${ORTHANC_DB_PASSWORD:?set ORTHANC_DB_PASSWORD in .env}
+    depends_on:
+      - db
 
 volumes:
   postgres_data:

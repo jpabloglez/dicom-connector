@@ -1,102 +1,140 @@
 # dicom/network.py
 """
-This DicomNetwork class provides methods for sending DICOM 
-files to PACS, querying PACS, and receiving files from PACS. 
-It also includes a basic implementation of a Storage SCP 
+This DicomNetwork class provides methods for sending DICOM
+files to PACS, querying PACS, and receiving files from PACS.
+It also includes a basic implementation of a Storage SCP
 server to receive DICOM files.
 """
-from pynetdicom import AE, evt, AllStoragePresentationContexts
-from pynetdicom.sop_class import PatientRootQueryRetrieveInformationModelFind, Verification
+import logging
+from pathlib import Path
+
+from pydicom.dataset import Dataset
+from pynetdicom import AE, AllStoragePresentationContexts, evt
+from pynetdicom.sop_class import (
+    PatientRootQueryRetrieveInformationModelFind,
+    StudyRootQueryRetrieveInformationModelMove,
+    Verification,
+)
+
+logger = logging.getLogger(__name__)
+
 
 class DicomNetwork:
-    def __init__(self, pacs_config):
+    def __init__(self, pacs_config, storage_dir="received_dicom"):
         self.pacs_config = pacs_config
-        self.ae = AE(ae_title=pacs_config.get('calling_ae_title', 'MYAETITLE'))
+        self.calling_ae_title = pacs_config.get('calling_ae_title', 'MYAETITLE')
+        self.storage_dir = Path(storage_dir)
+
+    def _build_ae(self):
+        """Build a fresh AE for one association.
+
+        A single long-lived AE would accumulate requested contexts across
+        calls (each add_requested_context() call adds another entry, and an
+        association is capped at 128 presentation contexts), so every
+        operation below gets its own AE instead of reusing self.ae.
+        """
+        return AE(ae_title=self.calling_ae_title)
+
+    def _associate(self, ae):
+        assoc = ae.associate(self.pacs_config['host'],
+                             self.pacs_config['port'],
+                             ae_title=self.pacs_config['ae_title'])
+        if not assoc.is_established:
+            raise Exception("Association rejected, aborted or never connected")
+        return assoc
 
     def echo_scu(self):
         """Verify connectivity to the PACS server with a C-ECHO."""
-        self.ae.add_requested_context(Verification)
+        ae = self._build_ae()
+        ae.add_requested_context(Verification)
 
-        assoc = self.ae.associate(self.pacs_config['host'],
-                                  self.pacs_config['port'],
-                                  ae_title=self.pacs_config['ae_title'])
-
-        if assoc.is_established:
+        assoc = self._associate(ae)
+        try:
             status = assoc.send_c_echo()
+            if not status:
+                raise Exception("C-ECHO request failed: no response from PACS")
+            return status.Status
+        finally:
             assoc.release()
-            if status:
-                return status.Status
-            raise Exception("C-ECHO request failed: no response from PACS")
-        else:
-            raise Exception("Association rejected, aborted or never connected")
 
     def send_to_pacs(self, dataset):
         """Send a DICOM dataset to the PACS server."""
-        self.ae.add_requested_context('1.2.840.10008.1.1')
-        self.ae.add_requested_context(dataset.SOPClassUID)
+        ae = self._build_ae()
+        ae.add_requested_context(Verification)
+        ae.add_requested_context(dataset.SOPClassUID)
 
-        assoc = self.ae.associate(self.pacs_config['host'], 
-                                  self.pacs_config['port'], 
-                                  ae_title=self.pacs_config['ae_title'])
-        
-        if assoc.is_established:
+        assoc = self._associate(ae)
+        try:
             status = assoc.send_c_store(dataset)
-            assoc.release()
             return status
-        else:
-            raise Exception("Association rejected, aborted or never connected")
+        finally:
+            assoc.release()
 
     def query_pacs(self, query_dataset):
         """Query the PACS server for studies/series/images."""
-        self.ae.add_requested_context(PatientRootQueryRetrieveInformationModelFind)
+        ae = self._build_ae()
+        ae.add_requested_context(PatientRootQueryRetrieveInformationModelFind)
 
-        assoc = self.ae.associate(self.pacs_config['host'], 
-                                  self.pacs_config['port'], 
-                                  ae_title=self.pacs_config['ae_title'])
-
-        if assoc.is_established:
+        assoc = self._associate(ae)
+        try:
             responses = assoc.send_c_find(query_dataset, PatientRootQueryRetrieveInformationModelFind)
             results = []
             for (status, identifier) in responses:
-                if status:
+                if status and identifier is not None:
                     results.append(identifier)
-            assoc.release()
             return results
-        else:
-            raise Exception("Association rejected, aborted or never connected")
+        finally:
+            assoc.release()
 
     def receive_from_pacs(self, study_instance_uid):
-        """Receive DICOM files from PACS based on StudyInstanceUID."""
-        self.ae.add_requested_context('1.2.840.10008.5.1.4.1.2.2.1')
-        self.ae.add_requested_context('1.2.840.10008.5.1.4.1.2.2.2')
-        self.ae.supported_contexts = AllStoragePresentationContexts
+        """Ask the PACS to move a study to us (C-MOVE) based on StudyInstanceUID.
 
-        assoc = self.ae.associate(self.pacs_config['host'], 
-                                  self.pacs_config['port'], 
-                                  ae_title=self.pacs_config['ae_title'])
+        This only delivers instances if a Storage SCP is already listening
+        under `self.calling_ae_title` (see start_store_scp) and the PACS is
+        configured to move to that AE title.
+        """
+        ae = self._build_ae()
+        ae.add_requested_context(StudyRootQueryRetrieveInformationModelMove)
 
-        if assoc.is_established:
-            # Implement C-MOVE operation here
-            # This is a simplified version and may need to be adjusted based on your PACS server's requirements
-            responses = assoc.send_c_move(study_instance_uid, '1.2.840.10008.5.1.4.1.2.2.2')
+        identifier = Dataset()
+        identifier.QueryRetrieveLevel = 'STUDY'
+        identifier.StudyInstanceUID = study_instance_uid
+
+        assoc = self._associate(ae)
+        try:
+            responses = assoc.send_c_move(
+                identifier,
+                self.calling_ae_title,
+                StudyRootQueryRetrieveInformationModelMove,
+            )
             for (status, identifier) in responses:
                 if status:
-                    print('C-MOVE request status: 0x{0:04x}'.format(status.Status))
+                    logger.info("C-MOVE request status: 0x%04x", status.Status)
+        finally:
             assoc.release()
-        else:
-            raise Exception("Association rejected, aborted or never connected")
 
-    @staticmethod
-    def handle_store(event):
-        """Handle a C-STORE request."""
+    def handle_store(self, event):
+        """Handle a C-STORE request by persisting the received instance."""
+        dataset = event.dataset
+        dataset.file_meta = event.file_meta
+
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        file_path = self.storage_dir / f"{dataset.SOPInstanceUID}.dcm"
+        try:
+            dataset.save_as(file_path, write_like_original=False)
+        except Exception:
+            logger.exception("Failed to store received instance %s", dataset.SOPInstanceUID)
+            return 0xA700  # Out of Resources
+
         return 0x0000  # Success
 
     def start_store_scp(self, port):
         """Start a Storage SCP server to receive DICOM files."""
-        self.ae.add_supported_context('1.2.840.10008.1.1')
+        ae = self._build_ae()
+        ae.add_supported_context(Verification)
         for context in AllStoragePresentationContexts:
-            self.ae.add_supported_context(context.abstract_syntax)
+            ae.add_supported_context(context.abstract_syntax)
 
         handlers = [(evt.EVT_C_STORE, self.handle_store)]
 
-        self.ae.start_server(('', port), evt_handlers=handlers)
+        ae.start_server(('', port), evt_handlers=handlers)
