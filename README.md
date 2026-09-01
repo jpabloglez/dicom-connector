@@ -105,7 +105,7 @@ reads its values from environment variables (see `.env.example`):
 | `DICOM_PACS_PORT` | PACS DICOM port | `4242` |
 | `DICOM_PACS_AE_TITLE` | Remote PACS AE title | `ORTHANC` |
 | `DICOM_CALLING_AE_TITLE` | This app's own AE title | `MYAETITLE` |
-| `DICOM_DB_NAME` / `_USER` / `_PASSWORD` / `_HOST` / `_PORT` | PostgreSQL connection | `dicom_db` / `dicom_user` / `dicom_password` / `db` / `5432` |
+| `DICOM_DB_NAME` / `_USER` / `_PASSWORD` / `_HOST` / `_PORT` | PostgreSQL connection | `dicom_db` / `dicom_user` / `dicom_password` / `localhost` / `5432` |
 | `ORTHANC_HTTP_URL` | Orthanc REST API base URL | `http://localhost:8042` |
 | `ORTHANC_HTTP_USERNAME` / `ORTHANC_HTTP_PASSWORD` | Orthanc REST API credentials | `orthanc` / `orthanc` |
 

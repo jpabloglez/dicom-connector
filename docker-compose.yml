@@ -14,13 +14,16 @@ services:
       - DICOM_DB_NAME=${DICOM_DB_NAME:-dicom_db}
       - DICOM_DB_USER=${DICOM_DB_USER:-dicom_user}
       - DICOM_DB_PASSWORD=${DICOM_DB_PASSWORD:?set DICOM_DB_PASSWORD in .env}
-      - DICOM_DB_HOST=${DICOM_DB_HOST:-db}
+      - DICOM_DB_HOST=${DICOM_DB_HOST:-localhost}
       - DICOM_DB_PORT=${DICOM_DB_PORT:-5432}
       - ORTHANC_HTTP_URL=${ORTHANC_HTTP_URL:-http://localhost:8042}
       - ORTHANC_HTTP_USERNAME=${ORTHANC_HTTP_USERNAME:-orthanc}
       - ORTHANC_HTTP_PASSWORD=${ORTHANC_HTTP_PASSWORD:?set ORTHANC_HTTP_PASSWORD in .env}
-    # network_mode: host is what lets DICOM_PACS_HOST/ORTHANC_HTTP_URL use
-    # "localhost" to reach the orthanc service's published ports below.
+    # network_mode: host is what lets DICOM_PACS_HOST/ORTHANC_HTTP_URL/
+    # DICOM_DB_HOST all use "localhost" to reach the other services' ports
+    # published below - it also means this container is NOT on the compose
+    # bridge network, so service names like "db"/"orthanc" do not resolve
+    # here (they do resolve for db/orthanc talking to each other below).
     network_mode: host
     depends_on:
       - db
@@ -28,6 +31,12 @@ services:
 
   db:
     image: postgres:13
+    ports:
+      # dicom_app runs with network_mode: host (see below), so it is not on
+      # this compose network and can't resolve "db" by name - it reaches
+      # this service the same way it reaches orthanc: via localhost and a
+      # published port. Bound to 127.0.0.1 only, not exposed externally.
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_DB: ${DICOM_DB_NAME:-dicom_db}
       POSTGRES_USER: ${DICOM_DB_USER:-dicom_user}

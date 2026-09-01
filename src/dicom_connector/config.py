@@ -12,7 +12,7 @@ DB_CONFIG = {
     'dbname': os.environ.get('DICOM_DB_NAME', 'dicom_db'),
     'user': os.environ.get('DICOM_DB_USER', 'dicom_user'),
     'password': os.environ.get('DICOM_DB_PASSWORD', 'dicom_password'),
-    'host': os.environ.get('DICOM_DB_HOST', 'db'),  # matches the db service name in docker-compose.yml
+    'host': os.environ.get('DICOM_DB_HOST', 'localhost'),  # docker-compose.yml always sets this explicitly for dicom_app
     'port': os.environ.get('DICOM_DB_PORT', '5432'),
 }
 
