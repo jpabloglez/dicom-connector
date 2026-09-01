@@ -12,6 +12,8 @@ dependencies = [
     "python-dotenv>=1.2.3",
     "rich>=15.0.0",
     "dicognito>=0.17.0",
+    "numpy>=2.4.6",
+    "pillow>=12.3.0",
 ]
 
 [project.scripts]

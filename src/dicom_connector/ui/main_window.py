@@ -4,6 +4,7 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, ttk
 
+from dicom_connector.ui.image_viewer import ImageViewerWindow
 from dicom_connector.ui.tag_browser import TagBrowserWindow
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,9 @@ class MainWindow(tk.Frame):
 
         self.view_tags_button = ttk.Button(self.file_frame, text="View Tags", command=self.view_tags)
         self.view_tags_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.preview_button = ttk.Button(self.file_frame, text="Preview", command=self.preview_image)
+        self.preview_button.pack(side=tk.LEFT, padx=5, pady=5)
 
         # Study Instance UID (used for Receive from PACS)
         self.receive_frame = ttk.LabelFrame(self, text="Receive (Study Instance UID)")
@@ -89,6 +93,18 @@ class MainWindow(tk.Frame):
             return
 
         TagBrowserWindow(self, dataset, title=f"DICOM Tags - {file_path}")
+
+    def preview_image(self):
+        file_path = self.file_path.get()
+        if not file_path:
+            self.log("Please select a file first")
+            return
+
+        try:
+            dataset = self.file_handler.read_dicom_file(file_path)
+            ImageViewerWindow(self, self.file_handler, dataset, title=f"DICOM Preview - {file_path}")
+        except Exception as exc:
+            self.log(f"Failed to preview file: {exc}")
 
     def _run_in_background(self, worker, on_done):
         """Run `worker()` off the Tk thread so associations don't freeze the UI.

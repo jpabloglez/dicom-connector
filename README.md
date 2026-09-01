@@ -12,13 +12,17 @@ medical imaging files against a PACS (e.g. Orthanc).
 - DICOM file loading and parsing
 - Metadata extraction and display
 - Full DICOM tag browser (View Tags), including nested sequences
+- Pixel data visualization (Preview) with window/level sliders
 - Anonymization before send (on by default), via dicognito
 - Network DICOM transfer: C-ECHO, C-STORE, C-FIND, C-MOVE, and a Storage SCP
 - Orthanc REST API client
 - Database storage for DICOM metadata (PostgreSQL)
 - Tkinter GUI
 
-Planned (not yet implemented): pixel data visualization.
+Pixel preview limitations (MVP): only transfer syntaxes pydicom can decode
+natively (no pylibjpeg/gdcm codecs installed, so compressed syntaxes like
+JPEG/JPEG2000 aren't supported yet), and only the first frame of
+multi-frame data.
 
 ## Project Structure
 
@@ -129,7 +133,9 @@ storage). All credentials are environment-variable driven - copy
 1. Launch the application - it also starts a background Storage SCP
    (`DICOM_STORE_SCP_PORT`, default `11115`) so images pushed back by a
    PACS have somewhere to land
-2. To send: use **Browse** to select a `.dcm` file, then **Send to PACS**
+2. To send: use **Browse** to select a `.dcm` file, then **Send to PACS**;
+   use **View Tags** to inspect its full DICOM dataset, or **Preview** to
+   view pixel data with adjustable window center/width sliders
 3. To receive: enter a **Study Instance UID** and click **Receive from
    PACS**. This issues a C-MOVE, which only delivers files if the PACS
    knows this app as a registered DICOM modality pointing at its Storage
