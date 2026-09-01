@@ -5,12 +5,11 @@ from requests.auth import HTTPBasicAuth
 from dicom_connector import config
 
 
-
 class OrthancAPI:
-    def __init__(self):
-        self.base_url = config.ORTHANC_HTTP_CONFIG['url']
-        self.auth = HTTPBasicAuth(config.ORTHANC_HTTP_CONFIG['username'],
-                                  config.ORTHANC_HTTP_CONFIG['password'])
+    def __init__(self, url=None, username=None, password=None):
+        self.base_url = url or config.ORTHANC_HTTP_CONFIG['url']
+        self.auth = HTTPBasicAuth(username or config.ORTHANC_HTTP_CONFIG['username'],
+                                  password or config.ORTHANC_HTTP_CONFIG['password'])
 
     def get_studies(self):
         response = requests.get(f"{self.base_url}/studies", auth=self.auth)

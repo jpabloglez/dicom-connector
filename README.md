@@ -138,6 +138,14 @@ storage). All credentials are environment-variable driven - copy
 4. Received files land in `DICOM_STORAGE_DIR` (default `received_dicom/`)
 5. Check the log pane for status and errors
 
+### Utility Scripts
+
+```bash
+# list studies currently stored in Orthanc (table or --json), optionally
+# filtered by --patient; see --help for connection overrides
+uv run python scripts/list_studies.py
+```
+
 ## Development
 
 ### Adding New Features
