@@ -170,6 +170,13 @@ uv run python scripts/anonymize.py study/ --output anonymized/
 uv run pytest tests/
 ```
 
+Most of the suite is self-contained (mocked I/O, synthetic DICOM datasets,
+a real local Storage SCP on an ephemeral port) and needs nothing running.
+`test_orthanc_connection.py` is marked `integration` and requires a live
+PACS/Orthanc (`docker compose up db orthanc`) - it skips cleanly, rather
+than failing, when nothing is reachable. `test_main_window.py` exercises
+the real Tk widgets and skips cleanly wherever no display is available.
+
 ### Linting
 
 ```bash

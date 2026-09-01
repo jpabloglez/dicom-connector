@@ -41,3 +41,6 @@ line-length = 100
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: requires a live PACS/Orthanc (e.g. `docker compose up db orthanc`); skipped automatically when unreachable",
+]
