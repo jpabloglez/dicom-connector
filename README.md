@@ -88,7 +88,13 @@ cd dicom-connector
 uv sync
 ```
 
-3. Run the application:
+3. Copy the environment template and fill in real values - `config.py` loads
+   `.env` automatically, including for this direct (non-Docker) path:
+```bash
+cp .env.example .env
+```
+
+4. Run the application:
 ```bash
 uv run dicom-connector
 # or: uv run python -m dicom_connector.main
