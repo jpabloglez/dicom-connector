@@ -1,0 +1,35 @@
+[project]
+name = "dicom-connector"
+version = "0.1.0"
+description = "Application for DICOM imaging pixel and metadata visualization"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydicom>=2.4,<3",
+    "pynetdicom>=2.1.1,<3",
+    "psycopg2-binary>=2.9,<3",
+    "requests>=2.32,<3",
+]
+
+[project.scripts]
+dicom-connector = "dicom_connector.main:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dicom_connector"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

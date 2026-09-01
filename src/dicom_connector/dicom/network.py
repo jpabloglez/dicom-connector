@@ -6,12 +6,29 @@ It also includes a basic implementation of a Storage SCP
 server to receive DICOM files.
 """
 from pynetdicom import AE, evt, AllStoragePresentationContexts
-from pynetdicom.sop_class import PatientRootQueryRetrieveInformationModelFind
+from pynetdicom.sop_class import PatientRootQueryRetrieveInformationModelFind, Verification
 
 class DicomNetwork:
     def __init__(self, pacs_config):
         self.pacs_config = pacs_config
-        self.ae = AE()
+        self.ae = AE(ae_title=pacs_config.get('calling_ae_title', 'MYAETITLE'))
+
+    def echo_scu(self):
+        """Verify connectivity to the PACS server with a C-ECHO."""
+        self.ae.add_requested_context(Verification)
+
+        assoc = self.ae.associate(self.pacs_config['host'],
+                                  self.pacs_config['port'],
+                                  ae_title=self.pacs_config['ae_title'])
+
+        if assoc.is_established:
+            status = assoc.send_c_echo()
+            assoc.release()
+            if status:
+                return status.Status
+            raise Exception("C-ECHO request failed: no response from PACS")
+        else:
+            raise Exception("Association rejected, aborted or never connected")
 
     def send_to_pacs(self, dataset):
         """Send a DICOM dataset to the PACS server."""

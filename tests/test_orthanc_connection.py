@@ -1,11 +1,8 @@
 # test_orthanc_connection.py
-import sys
-import os.path as op
-sys.path.insert(0, op.dirname(op.dirname(__file__)))
+from dicom_connector import config
+from dicom_connector.dicom.network import DicomNetwork
+from dicom_connector.dicom.orthanc_api import OrthancAPI
 
-from dicom.network import DicomNetwork
-from dicom.orthanc_api import OrthancAPI
-import config
 
 def test_dicom_echo():
     network = DicomNetwork(config.PACS_CONFIG)
@@ -15,6 +12,7 @@ def test_dicom_echo():
     except Exception as e:
         print(f"DICOM Echo failed: {str(e)}")
 
+
 def test_orthanc_http_api():
     api = OrthancAPI()
     try:
@@ -23,9 +21,10 @@ def test_orthanc_http_api():
     except Exception as e:
         print(f"Failed to get studies from Orthanc: {str(e)}")
 
+
 if __name__ == "__main__":
     print("Testing DICOM Echo with Orthanc...")
     test_dicom_echo()
-    
+
     print("\nTesting Orthanc HTTP API...")
     test_orthanc_http_api()

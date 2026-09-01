@@ -4,7 +4,9 @@ services:
   dicom_app:
     build: .
     volumes:
-      - .:/app
+      # Note: do NOT bind-mount the whole repo over /app - it would hide the
+      # .venv installed during the image build. Mount the X11 socket only.
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
     environment:
       - DISPLAY=${DISPLAY}
     network_mode: host

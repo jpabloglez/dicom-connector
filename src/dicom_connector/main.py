@@ -1,10 +1,12 @@
 # main.py
 import tkinter as tk
-from ui.main_window import MainWindow
-from dicom.file_handler import DicomFileHandler
-from dicom.network import DicomNetwork
-from database.db_handler import DatabaseHandler
-import config
+
+from dicom_connector import config
+from dicom_connector.database.db_handler import DatabaseHandler
+from dicom_connector.dicom.file_handler import DicomFileHandler
+from dicom_connector.dicom.network import DicomNetwork
+from dicom_connector.ui.main_window import MainWindow
+
 
 def main():
     root = tk.Tk()
@@ -22,6 +24,7 @@ def main():
     main_window.pack(fill=tk.BOTH, expand=True)
 
     root.mainloop()
+
 
 if __name__ == "__main__":
     main()

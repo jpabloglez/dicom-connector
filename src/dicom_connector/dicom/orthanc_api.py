@@ -1,11 +1,8 @@
 # dicom/orthanc_api.py
-import sys
-import os.path as op
-sys.path.insert(0, op.dirname(op.dirname(__file__)))
-
 import requests
 from requests.auth import HTTPBasicAuth
-import config
+
+from dicom_connector import config
 
 
 
