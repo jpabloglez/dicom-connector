@@ -11,13 +11,14 @@ medical imaging files against a PACS (e.g. Orthanc).
 
 - DICOM file loading and parsing
 - Metadata extraction and display
+- Full DICOM tag browser (View Tags), including nested sequences
+- Anonymization before send (on by default), via dicognito
 - Network DICOM transfer: C-ECHO, C-STORE, C-FIND, C-MOVE, and a Storage SCP
 - Orthanc REST API client
 - Database storage for DICOM metadata (PostgreSQL)
 - Tkinter GUI
 
-Planned (not yet implemented): pixel data visualization, a full DICOM tag
-browser, and anonymization before send.
+Planned (not yet implemented): pixel data visualization.
 
 ## Project Structure
 
@@ -144,6 +145,10 @@ storage). All credentials are environment-variable driven - copy
 # list studies currently stored in Orthanc (table or --json), optionally
 # filtered by --patient; see --help for connection overrides
 uv run python scripts/list_studies.py
+
+# anonymize local .dcm files (or whole directories) before sending them
+# elsewhere; files from the same study keep consistent identifiers
+uv run python scripts/anonymize.py study/ --output anonymized/
 ```
 
 ## Development

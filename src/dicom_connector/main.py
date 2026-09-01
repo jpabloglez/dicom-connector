@@ -5,6 +5,7 @@ import tkinter as tk
 
 from dicom_connector import config
 from dicom_connector.database.db_handler import DatabaseHandler
+from dicom_connector.dicom.anonymizer import DatasetAnonymizer
 from dicom_connector.dicom.file_handler import DicomFileHandler
 from dicom_connector.dicom.network import DicomNetwork
 from dicom_connector.ui.main_window import MainWindow
@@ -42,8 +43,13 @@ def main():
     network_handler = DicomNetwork(config.PACS_CONFIG, storage_dir=config.STORAGE_DIR)
     _start_store_scp_in_background(network_handler, config.PACS_CONFIG['store_scp_port'])
 
+    # One shared Anonymizer for the app's lifetime: reusing it across sends
+    # keeps identifiers (StudyInstanceUID, PatientID, etc.) mapped
+    # consistently across files from the same study/patient.
+    anonymizer = DatasetAnonymizer()
+
     # Create main window
-    main_window = MainWindow(root, file_handler, network_handler, db_handler)
+    main_window = MainWindow(root, file_handler, network_handler, db_handler, anonymizer)
     main_window.pack(fill=tk.BOTH, expand=True)
 
     root.mainloop()

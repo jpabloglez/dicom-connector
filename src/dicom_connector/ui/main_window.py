@@ -10,11 +10,12 @@ logger = logging.getLogger(__name__)
 
 
 class MainWindow(tk.Frame):
-    def __init__(self, master, file_handler, network_handler, db_handler):
+    def __init__(self, master, file_handler, network_handler, db_handler, anonymizer):
         super().__init__(master)
         self.file_handler = file_handler
         self.network_handler = network_handler
         self.db_handler = db_handler
+        self.anonymizer = anonymizer
 
         self.create_widgets()
 
@@ -50,6 +51,14 @@ class MainWindow(tk.Frame):
 
         self.receive_button = ttk.Button(self.button_frame, text="Receive from PACS", command=self.receive_from_pacs)
         self.receive_button.pack(side=tk.LEFT, padx=5)
+
+        # Default on: de-identifying before transmission is the safer
+        # default for medical data; sending raw is still one click away.
+        self.anonymize_var = tk.BooleanVar(value=True)
+        self.anonymize_check = ttk.Checkbutton(
+            self.button_frame, text="Anonymize before sending", variable=self.anonymize_var,
+        )
+        self.anonymize_check.pack(side=tk.LEFT, padx=15)
 
         # Status and log area
         self.log_frame = ttk.LabelFrame(self, text="Log")
@@ -113,11 +122,17 @@ class MainWindow(tk.Frame):
             self.log("Please select a file first")
             return
 
-        self.log(f"Sending file: {file_path} to PACS...")
+        anonymize = self.anonymize_var.get()
+        self.log(f"Sending file: {file_path} to PACS{' (anonymized)' if anonymize else ''}...")
 
         def worker():
             dataset = self.file_handler.read_dicom_file(file_path)
+            if anonymize:
+                dataset = self.anonymizer.anonymize(dataset)
             status = self.network_handler.send_to_pacs(dataset)
+            # metadata/db record reflect what was actually transmitted, so
+            # the local audit trail never holds identifiers that were
+            # deliberately stripped before the data left this machine
             metadata = self.file_handler.get_dicom_metadata(dataset)
             self.db_handler.insert_dicom_record(metadata, file_path)
             return status

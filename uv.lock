@@ -168,10 +168,23 @@ wheels = [
 ]
 
 [[package]]
+name = "dicognito"
+version = "0.17.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydicom" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/17/be/1346f7651886170bc7000436b632471c943c8ade60923684b228e5d10ef6/dicognito-0.17.0.tar.gz", hash = "sha256:96e700d69d4915251a297b72ab0f6fe414b42fc9b709f04b440847805ca502af", size = 46585, upload-time = "2023-11-15T11:17:44.752Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/aa/d3/696490216d9fdc549e9d96ed2e7ba3a759f1703e93eb5f905d40ee96e1df/dicognito-0.17.0-py3-none-any.whl", hash = "sha256:91058bd58ab92d2cdbfecec64a2aa7e84c62b42dabdc72962cf40e7b921d759d", size = 42032, upload-time = "2023-11-15T11:17:42.256Z" },
+]
+
+[[package]]
 name = "dicom-connector"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "dicognito" },
     { name = "psycopg2-binary" },
     { name = "pydicom" },
     { name = "pynetdicom" },
@@ -188,6 +201,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dicognito", specifier = ">=0.17.0" },
     { name = "psycopg2-binary", specifier = ">=2.9,<3" },
     { name = "pydicom", specifier = ">=2.4,<3" },
     { name = "pynetdicom", specifier = ">=2.1.1,<3" },
