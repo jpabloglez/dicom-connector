@@ -1,9 +1,11 @@
 # test_pixel_preview.py
 import numpy as np
 import pytest
+from openjpeg.utils import encode_array
 from PIL import Image
 from pydicom.dataset import Dataset, FileMetaDataset
-from pydicom.uid import ExplicitVRLittleEndian, generate_uid
+from pydicom.encaps import encapsulate
+from pydicom.uid import ExplicitVRLittleEndian, JPEG2000Lossless, generate_uid
 
 from dicom_connector.dicom.file_handler import DicomFileHandler
 
@@ -135,3 +137,56 @@ def test_multiframe_uses_only_first_frame():
 
     # first frame is the real gradient (varies across columns), not the all-zero second frame
     assert arr.max() > arr.min()
+
+
+def make_jpeg2000_dataset(rows=32, cols=32):
+    """A genuinely JPEG2000-compressed dataset (real codestream via
+    pylibjpeg-openjpeg), not just a transfer syntax UID with raw bytes -
+    exercises the actual decode path, not just that the packages import."""
+    gradient = np.tile(np.linspace(0, 4000, cols, dtype=np.uint16), (rows, 1))
+    codestream = encode_array(gradient, bits_stored=16, photometric_interpretation=0, codec_format=0)
+
+    ds = Dataset()
+    ds.Rows = rows
+    ds.Columns = cols
+    ds.SamplesPerPixel = 1
+    ds.PhotometricInterpretation = "MONOCHROME2"
+    ds.BitsAllocated = 16
+    ds.BitsStored = 16
+    ds.HighBit = 15
+    ds.PixelRepresentation = 0
+    ds.RescaleSlope = 1
+    ds.RescaleIntercept = -1000
+    ds.PixelData = encapsulate([codestream])
+    ds["PixelData"].is_undefined_length = True
+    ds.SOPClassUID = "1.2.840.10008.5.1.4.1.1.2"
+    ds.SOPInstanceUID = generate_uid()
+    ds.is_little_endian = True
+    ds.is_implicit_VR = False
+
+    file_meta = FileMetaDataset()
+    file_meta.MediaStorageSOPClassUID = ds.SOPClassUID
+    file_meta.MediaStorageSOPInstanceUID = ds.SOPInstanceUID
+    file_meta.TransferSyntaxUID = JPEG2000Lossless
+    ds.file_meta = file_meta
+    return ds
+
+
+def test_compressed_transfer_syntax_decodes_via_pylibjpeg():
+    ds = make_jpeg2000_dataset()
+
+    result = DicomFileHandler().get_preview_image(ds, window_center=40, window_width=400)
+    arr = np.array(result.image)
+
+    # decoded gradient should still vary left-to-right, not be blank/corrupt
+    assert arr[0, 0] < arr[0, -1]
+    assert arr.min() == 0
+    assert arr.max() == 255
+
+
+def test_undecodable_pixel_data_raises_clear_error():
+    ds = make_grayscale_dataset()
+    ds.PixelData = b"\x00\x01\x02\x03"  # too short to be valid pixel data for Rows*Columns*2 bytes
+
+    with pytest.raises(ValueError, match="[Cc]ould not decode|PixelData"):
+        DicomFileHandler().get_preview_image(ds)

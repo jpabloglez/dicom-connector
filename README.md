@@ -12,17 +12,15 @@ medical imaging files against a PACS (e.g. Orthanc).
 - DICOM file loading and parsing
 - Metadata extraction and display
 - Full DICOM tag browser (View Tags), including nested sequences
-- Pixel data visualization (Preview) with window/level sliders
+- Pixel data visualization (Preview) with window/level sliders, including
+  compressed transfer syntaxes (JPEG, JPEG2000, ...) via pylibjpeg
 - Anonymization before send (on by default), via dicognito
 - Network DICOM transfer: C-ECHO, C-STORE, C-FIND, C-MOVE, and a Storage SCP
 - Orthanc REST API client
 - Database storage for DICOM metadata (PostgreSQL)
 - Tkinter GUI
 
-Pixel preview limitations (MVP): only transfer syntaxes pydicom can decode
-natively (no pylibjpeg/gdcm codecs installed, so compressed syntaxes like
-JPEG/JPEG2000 aren't supported yet), and only the first frame of
-multi-frame data.
+Pixel preview limitation (MVP): only the first frame of multi-frame data.
 
 ## Project Structure
 

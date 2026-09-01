@@ -14,6 +14,9 @@ dependencies = [
     "dicognito>=0.17.0",
     "numpy>=2.4.6",
     "pillow>=12.3.0",
+    "pylibjpeg>=2.1.0",
+    "pylibjpeg-libjpeg>=2.4.0",
+    "pylibjpeg-openjpeg>=2.5.0",
 ]
 
 [project.scripts]

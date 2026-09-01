@@ -53,12 +53,12 @@ class DicomFileHandler:
         (RescaleSlope/RescaleIntercept) then windows to 8-bit using
         `window_center`/`window_width` if given, else the dataset's own
         WindowCenter/WindowWidth, else an automatic full-range stretch.
-        RGB/YBR data is passed through unwindowed.
+        RGB/YBR data is passed through unwindowed. Compressed transfer
+        syntaxes (JPEG, JPEG2000, ...) are decoded via the pylibjpeg
+        plugins declared as project dependencies; anything pydicom still
+        can't decode raises a clear ValueError rather than a raw crash.
 
-        Limitations (MVP): only transfer syntaxes pydicom can natively
-        decode without extra codecs (pylibjpeg/gdcm) - compressed syntaxes
-        raise a clear ValueError rather than silently failing - and only
-        the first frame of multi-frame data.
+        Limitation (MVP): only the first frame of multi-frame data.
         """
         if 'PixelData' not in dataset:
             raise ValueError("Dataset has no PixelData to preview")
