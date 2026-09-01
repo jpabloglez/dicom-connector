@@ -14,8 +14,14 @@ import argparse
 import json
 import sys
 
+from rich.console import Console
+from rich.table import Table
+
 from dicom_connector import config
 from dicom_connector.dicom.orthanc_api import OrthancAPI
+
+console = Console()
+error_console = Console(stderr=True)
 
 
 def parse_args(argv=None):
@@ -74,27 +80,29 @@ def matches_patient_filter(study, needle):
 
 def print_table(studies):
     if not studies:
-        print("No studies found.")
+        console.print("[yellow]No studies found.[/yellow]")
         return
 
-    headers = ["Patient Name", "Patient ID", "Study Date", "Description", "Series", "Study Instance UID"]
-    rows = [
-        [
-            s["patient_name"], s["patient_id"], s["study_date"], s["study_description"],
-            str(s["series_count"]), s["study_instance_uid"],
-        ]
-        for s in studies
-    ]
-    widths = [max(len(header), *(len(row[i]) for row in rows)) for i, header in enumerate(headers)]
+    table = Table(title="Orthanc Studies")
+    table.add_column("Patient Name", style="bold")
+    table.add_column("Patient ID")
+    table.add_column("Study Date")
+    table.add_column("Description")
+    table.add_column("Series", justify="right")
+    table.add_column("Study Instance UID", style="dim", no_wrap=True, overflow="ellipsis", max_width=28)
 
-    def format_row(cols):
-        return "  ".join(col.ljust(width) for col, width in zip(cols, widths))
+    for s in studies:
+        table.add_row(
+            s["patient_name"] or "-",
+            s["patient_id"] or "-",
+            s["study_date"] or "-",
+            s["study_description"] or "-",
+            str(s["series_count"]),
+            s["study_instance_uid"] or "-",
+        )
 
-    print(format_row(headers))
-    print("  ".join("-" * width for width in widths))
-    for row in rows:
-        print(format_row(row))
-    print(f"\n{len(studies)} study(ies) found.")
+    console.print(table)
+    console.print(f"[dim]{len(studies)} study(ies) found.[/dim]")
 
 
 def main(argv=None):
@@ -107,7 +115,7 @@ def main(argv=None):
             study_ids = study_ids[:args.limit]
         studies = fetch_studies(api, study_ids)
     except Exception as exc:
-        print(f"Failed to query Orthanc at {args.url}: {exc}", file=sys.stderr)
+        error_console.print(f"[bold red]Failed to query Orthanc at {args.url}: {exc}[/bold red]")
         return 1
 
     studies = [s for s in studies if matches_patient_filter(s, args.patient)]
