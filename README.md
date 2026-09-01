@@ -125,10 +125,18 @@ storage). All credentials are environment-variable driven - copy
 
 ## Usage
 
-1. Launch the application
-2. Use **Browse** to select a `.dcm` file
-3. Use **Send to PACS** / **Receive from PACS** to transfer studies
-4. Check the log pane for status and errors
+1. Launch the application - it also starts a background Storage SCP
+   (`DICOM_STORE_SCP_PORT`, default `11115`) so images pushed back by a
+   PACS have somewhere to land
+2. To send: use **Browse** to select a `.dcm` file, then **Send to PACS**
+3. To receive: enter a **Study Instance UID** and click **Receive from
+   PACS**. This issues a C-MOVE, which only delivers files if the PACS
+   knows this app as a registered DICOM modality pointing at its Storage
+   SCP - the `docker compose` setup does this automatically via
+   `docker/orthanc-config/modalities.json`; a different PACS needs the
+   same registration (AE title, host, `DICOM_STORE_SCP_PORT`) added manually
+4. Received files land in `DICOM_STORAGE_DIR` (default `received_dicom/`)
+5. Check the log pane for status and errors
 
 ## Development
 

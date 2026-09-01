@@ -1,6 +1,11 @@
 # ui/main_window.py
+import logging
+import threading
 import tkinter as tk
 from tkinter import filedialog, ttk
+
+logger = logging.getLogger(__name__)
+
 
 class MainWindow(tk.Frame):
     def __init__(self, master, file_handler, network_handler, db_handler):
@@ -12,7 +17,7 @@ class MainWindow(tk.Frame):
         self.create_widgets()
 
     def create_widgets(self):
-        # File selection
+        # File selection (used for Send to PACS)
         self.file_frame = ttk.LabelFrame(self, text="File Selection")
         self.file_frame.pack(fill=tk.X, padx=10, pady=10)
 
@@ -22,6 +27,14 @@ class MainWindow(tk.Frame):
 
         self.browse_button = ttk.Button(self.file_frame, text="Browse", command=self.browse_file)
         self.browse_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+        # Study Instance UID (used for Receive from PACS)
+        self.receive_frame = ttk.LabelFrame(self, text="Receive (Study Instance UID)")
+        self.receive_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+
+        self.study_uid = tk.StringVar()
+        self.study_uid_entry = ttk.Entry(self.receive_frame, textvariable=self.study_uid, width=50)
+        self.study_uid_entry.pack(side=tk.LEFT, padx=5, pady=5)
 
         # Transmission buttons
         self.button_frame = ttk.Frame(self)
@@ -40,19 +53,79 @@ class MainWindow(tk.Frame):
         self.log_text = tk.Text(self.log_frame, wrap=tk.WORD, height=10)
         self.log_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
+    def log(self, message):
+        self.log_text.insert(tk.END, f"{message}\n")
+        self.log_text.see(tk.END)
+
     def browse_file(self):
         filename = filedialog.askopenfilename(filetypes=[("DICOM files", "*.dcm")])
         if filename:
             self.file_path.set(filename)
 
+    def _run_in_background(self, worker, on_done):
+        """Run `worker()` off the Tk thread so associations don't freeze the UI.
+
+        `on_done(result, error)` is marshalled back onto the Tk thread via
+        `after()`, since Tk widgets aren't safe to touch from another thread.
+        """
+        buttons = (self.send_button, self.receive_button)
+        for button in buttons:
+            button.state(["disabled"])
+
+        def target():
+            try:
+                result = worker()
+            except Exception as exc:
+                logger.exception("Background PACS operation failed")
+                self.after(0, self._finish, on_done, None, exc, buttons)
+            else:
+                self.after(0, self._finish, on_done, result, None, buttons)
+
+        threading.Thread(target=target, daemon=True).start()
+
+    def _finish(self, on_done, result, error, buttons):
+        for button in buttons:
+            button.state(["!disabled"])
+        on_done(result, error)
+
     def send_to_pacs(self):
         file_path = self.file_path.get()
-        if file_path:
-            # Here you would call the appropriate method from network_handler
-            self.log_text.insert(tk.END, f"Sending file: {file_path} to PACS\n")
-        else:
-            self.log_text.insert(tk.END, "Please select a file first\n")
+        if not file_path:
+            self.log("Please select a file first")
+            return
+
+        self.log(f"Sending file: {file_path} to PACS...")
+
+        def worker():
+            dataset = self.file_handler.read_dicom_file(file_path)
+            status = self.network_handler.send_to_pacs(dataset)
+            metadata = self.file_handler.get_dicom_metadata(dataset)
+            self.db_handler.insert_dicom_record(metadata, file_path)
+            return status
+
+        def on_done(status, error):
+            if error is not None:
+                self.log(f"Send failed: {error}")
+            else:
+                self.log(f"Send complete, status: 0x{getattr(status, 'Status', 0):04X}")
+
+        self._run_in_background(worker, on_done)
 
     def receive_from_pacs(self):
-        # Here you would call the appropriate method from network_handler
-        self.log_text.insert(tk.END, "Receiving files from PACS\n")
+        study_uid = self.study_uid.get().strip()
+        if not study_uid:
+            self.log("Please enter a Study Instance UID first")
+            return
+
+        self.log(f"Requesting study {study_uid} from PACS...")
+
+        def worker():
+            return self.network_handler.receive_from_pacs(study_uid)
+
+        def on_done(_result, error):
+            if error is not None:
+                self.log(f"Receive failed: {error}")
+            else:
+                self.log("Receive request completed - check the log/storage folder for incoming files")
+
+        self._run_in_background(worker, on_done)

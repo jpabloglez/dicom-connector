@@ -1,0 +1,16 @@
+{
+  // Registers this app as a known DICOM modality so that a C-MOVE issued
+  // by dicom_app (see receive_from_pacs() in dicom/network.py) can actually
+  // be pushed back to it. dicom_app runs with network_mode: host, so its
+  // Storage SCP listens directly on the Docker host's network; from inside
+  // this container, that host is reachable at host.docker.internal (mapped
+  // via the extra_hosts entry on this service in docker-compose.yml).
+  //
+  // ${DICOM_CALLING_AE_TITLE} and ${DICOM_STORE_SCP_PORT} are substituted
+  // from this container's own environment (Orthanc performs standard env
+  // var substitution on its config files) and must match config.py's
+  // PACS_CONFIG['calling_ae_title'] / ['store_scp_port'] on the app side.
+  "DicomModalities": {
+    "dicom_app": ["${DICOM_CALLING_AE_TITLE}", "host.docker.internal", ${DICOM_STORE_SCP_PORT}]
+  }
+}

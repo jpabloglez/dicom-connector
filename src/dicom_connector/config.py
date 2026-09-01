@@ -16,7 +16,14 @@ PACS_CONFIG = {
     'port': int(os.environ.get('DICOM_PACS_PORT', '4242')),  # matches orthanc's DICOM port in docker-compose.yml
     'ae_title': os.environ.get('DICOM_PACS_AE_TITLE', 'ORTHANC'),
     'calling_ae_title': os.environ.get('DICOM_CALLING_AE_TITLE', 'MYAETITLE'),
+    # port our own Storage SCP listens on, to receive images pushed back by
+    # a C-MOVE; the PACS must be configured with this app as a known DICOM
+    # modality pointing at this port for receive_from_pacs() to work
+    'store_scp_port': int(os.environ.get('DICOM_STORE_SCP_PORT', '11115')),
 }
+
+# where DicomNetwork.handle_store() writes instances received via C-STORE/C-MOVE
+STORAGE_DIR = os.environ.get('DICOM_STORAGE_DIR', 'received_dicom')
 
 DB_CONFIG = {
     'dbname': os.environ.get('DICOM_DB_NAME', 'dicom_db'),
