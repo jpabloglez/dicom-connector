@@ -10,7 +10,7 @@ ORTHANC := orthanc
 .PHONY: help env up detach down build rebuild \
         restart restart-app restart-db restart-orthanc \
         logs logs-app logs-db logs-orthanc \
-        ps shell shell-db shell-orthanc test lint clean-volumes
+        ps shell shell-db shell-orthanc test lint studies clean-volumes
 
 help: ## Show this help
 	@echo "Usage: make <target>"
@@ -81,6 +81,9 @@ test: ## Run the test suite locally (via uv, not in Docker)
 
 lint: ## Run ruff locally (via uv, not in Docker)
 	uv run ruff check src tests scripts
+
+studies: ## List studies currently synced in Orthanc (ARGS="--patient smith" to filter, "--json", etc.)
+	uv run python scripts/list_studies.py $(ARGS)
 
 clean-volumes: ## DESTRUCTIVE: stop containers and delete all volumes (Postgres/Orthanc data)
 	@echo "This deletes all Postgres and Orthanc data volumes. Ctrl-C now to cancel, continuing in 5s..."

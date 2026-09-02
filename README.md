@@ -135,8 +135,10 @@ storage). All credentials are environment-variable driven - copy
 A `Makefile` wraps the common operations - run `make help` for the full
 list (`up`, `detach`, `build`, `rebuild`, `logs[-app|-db|-orthanc]`,
 `restart[-app|-db|-orthanc]`, `shell[-db|-orthanc]`, `ps`, `down`,
-`clean-volumes`, plus `test`/`lint`). `make up`/`make build`/etc. create
-`.env` from `.env.example` automatically if it's missing.
+`clean-volumes`, plus `test`/`lint`/`studies`). `make up`/`make build`/etc.
+create `.env` from `.env.example` automatically if it's missing.
+`make studies` lists what's currently synced in Orthanc (`ARGS="--patient
+smith"` to filter, `ARGS="--json"` for scripting, etc.).
 
 ## Usage
 
