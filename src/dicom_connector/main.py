@@ -49,7 +49,10 @@ def main():
     anonymizer = DatasetAnonymizer()
 
     # Create main window
-    main_window = MainWindow(root, file_handler, network_handler, db_handler, anonymizer)
+    main_window = MainWindow(
+        root, file_handler, network_handler, db_handler, anonymizer,
+        orthanc_url=config.ORTHANC_HTTP_CONFIG['url'],
+    )
     main_window.pack(fill=tk.BOTH, expand=True)
 
     root.mainloop()

@@ -16,6 +16,10 @@ medical imaging files against a PACS (e.g. Orthanc).
   compressed transfer syntaxes (JPEG, JPEG2000, ...) via pylibjpeg
 - Anonymization before send (on by default), via dicognito
 - Network DICOM transfer: C-ECHO, C-STORE, C-FIND, C-MOVE, and a Storage SCP
+- Auto-refreshing "Received Files (Today)" panel - select a received file
+  to load it straight into View Tags/Preview/Send, no manual browsing
+- One-click browser link to Orthanc's own web UI (Orthanc Explorer) to
+  browse/search studies on the PACS
 - Orthanc REST API client
 - Database storage for DICOM metadata (PostgreSQL)
 - Tkinter GUI
@@ -140,14 +144,22 @@ list (`up`, `detach`, `build`, `rebuild`, `logs[-app|-db|-orthanc]`,
 2. To send: use **Browse** to select a `.dcm` file, then **Send to PACS**;
    use **View Tags** to inspect its full DICOM dataset, or **Preview** to
    view pixel data with adjustable window center/width sliders
-3. To receive: enter a **Study Instance UID** and click **Receive from
+3. To find a Study Instance UID to receive, click **Open Orthanc Studies**
+   to browse the PACS's own web UI in your browser (Orthanc Explorer,
+   requires the same HTTP credentials as `ORTHANC_HTTP_USERNAME`/
+   `_PASSWORD`)
+4. To receive: enter that **Study Instance UID** and click **Receive from
    PACS**. This issues a C-MOVE, which only delivers files if the PACS
    knows this app as a registered DICOM modality pointing at its Storage
    SCP - the `docker compose` setup does this automatically via
    `docker/orthanc-config/modalities.json`; a different PACS needs the
    same registration (AE title, host, `DICOM_STORE_SCP_PORT`) added manually
-4. Received files land in `DICOM_STORAGE_DIR` (default `received_dicom/`)
-5. Check the log pane for status and errors
+5. Received files land in `DICOM_STORAGE_DIR` (default `received_dicom/`)
+   and show up automatically in the **Received Files (Today)** panel -
+   select a row to load it into File Selection, then View Tags/Preview/
+   Send work on it like any other file. The panel only lists files
+   received today; use **Refresh** to re-scan the folder manually
+6. Check the log pane for status and errors
 
 ### Utility Scripts
 

@@ -2,6 +2,8 @@
 import logging
 import threading
 import tkinter as tk
+import webbrowser
+from datetime import date, datetime
 from tkinter import filedialog, ttk
 
 from dicom_connector.ui.image_viewer import ImageViewerWindow
@@ -11,12 +13,13 @@ logger = logging.getLogger(__name__)
 
 
 class MainWindow(tk.Frame):
-    def __init__(self, master, file_handler, network_handler, db_handler, anonymizer):
+    def __init__(self, master, file_handler, network_handler, db_handler, anonymizer, orthanc_url=None):
         super().__init__(master)
         self.file_handler = file_handler
         self.network_handler = network_handler
         self.db_handler = db_handler
         self.anonymizer = anonymizer
+        self.orthanc_url = orthanc_url
 
         self.create_widgets()
 
@@ -46,6 +49,11 @@ class MainWindow(tk.Frame):
         self.study_uid_entry = ttk.Entry(self.receive_frame, textvariable=self.study_uid, width=50)
         self.study_uid_entry.pack(side=tk.LEFT, padx=5, pady=5)
 
+        self.open_orthanc_button = ttk.Button(
+            self.receive_frame, text="Open Orthanc Studies", command=self.open_orthanc_explorer,
+        )
+        self.open_orthanc_button.pack(side=tk.LEFT, padx=5, pady=5)
+
         # Transmission buttons
         self.button_frame = ttk.Frame(self)
         self.button_frame.pack(fill=tk.X, padx=10, pady=10)
@@ -64,12 +72,44 @@ class MainWindow(tk.Frame):
         )
         self.anonymize_check.pack(side=tk.LEFT, padx=15)
 
+        # Received files: auto-refreshed after each successful receive (and
+        # once at startup), scoped to today - selecting a row loads it into
+        # File Selection above, so View Tags/Preview/Send all just work
+        self.received_frame = ttk.LabelFrame(self, text="Received Files (Today)")
+        self.received_frame.pack(fill=tk.BOTH, padx=10, pady=(0, 10))
+
+        received_columns = ("time", "patient", "study_date", "modality", "description")
+        self.received_tree = ttk.Treeview(
+            self.received_frame, columns=received_columns, show="headings", height=5,
+        )
+        for column, heading, width in (
+            ("time", "Received", 80), ("patient", "Patient", 150), ("study_date", "Study Date", 90),
+            ("modality", "Modality", 70), ("description", "Description", 220),
+        ):
+            self.received_tree.heading(column, text=heading)
+            self.received_tree.column(column, width=width, anchor="center" if column != "description" else "w")
+        self.received_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.received_tree.bind("<<TreeviewSelect>>", self._on_received_file_selected)
+
+        received_scrollbar = ttk.Scrollbar(
+            self.received_frame, orient="vertical", command=self.received_tree.yview,
+        )
+        self.received_tree.configure(yscrollcommand=received_scrollbar.set)
+        received_scrollbar.pack(side=tk.LEFT, fill=tk.Y, pady=5)
+
+        self.refresh_received_button = ttk.Button(
+            self.received_frame, text="Refresh", command=self.refresh_received_files,
+        )
+        self.refresh_received_button.pack(side=tk.LEFT, padx=5, pady=5)
+
         # Status and log area
         self.log_frame = ttk.LabelFrame(self, text="Log")
         self.log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         self.log_text = tk.Text(self.log_frame, wrap=tk.WORD, height=10)
         self.log_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        self.refresh_received_files()  # show anything already received today, e.g. from an earlier run
 
     def log(self, message):
         self.log_text.insert(tk.END, f"{message}\n")
@@ -105,6 +145,74 @@ class MainWindow(tk.Frame):
             ImageViewerWindow(self, self.file_handler, dataset, title=f"DICOM Preview - {file_path}")
         except Exception as exc:
             self.log(f"Failed to preview file: {exc}")
+
+    def open_orthanc_explorer(self):
+        if not self.orthanc_url:
+            self.log("Orthanc URL not configured")
+            return
+
+        url = f"{self.orthanc_url.rstrip('/')}/ui/app/"
+        try:
+            opened = webbrowser.open(url)
+        except Exception as exc:
+            self.log(f"Failed to open browser: {exc}")
+            return
+
+        if opened:
+            self.log(f"Opening Orthanc Studies in browser: {url}")
+        else:
+            self.log(f"Could not open a browser automatically - open manually: {url}")
+
+    def refresh_received_files(self):
+        """Repopulate the Received Files list from storage_dir, scoped to
+        today. Called at startup and after each successful receive."""
+        self.received_tree.delete(*self.received_tree.get_children())
+
+        storage_dir = self.network_handler.storage_dir
+        if not storage_dir.exists():
+            return
+
+        try:
+            paths = sorted(storage_dir.glob("*.dcm"), key=lambda p: p.stat().st_mtime, reverse=True)
+        except OSError as exc:
+            self.log(f"Could not list received files: {exc}")
+            return
+
+        # Deliberately naive/local, not timezone-aware: "today" here means
+        # the user's local wall-clock day (matching what they see on their
+        # desktop), and os.stat().st_mtime is inherently local-naive too -
+        # making just one side tz-aware would introduce a UTC/local
+        # mismatch rather than fix one.
+        today = date.today()  # noqa: DTZ011
+        for path in paths:
+            try:
+                received_at = datetime.fromtimestamp(path.stat().st_mtime)  # noqa: DTZ006
+            except OSError:
+                continue
+            if received_at.date() != today:
+                continue
+
+            try:
+                dataset = self.file_handler.read_dicom_file(path)
+                metadata = self.file_handler.get_dicom_metadata(dataset)
+            except Exception:
+                metadata = {"PatientName": "?", "StudyDate": "?", "Modality": "?", "StudyDescription": "?"}
+
+            self.received_tree.insert(
+                "", "end", iid=str(path),
+                values=(
+                    received_at.strftime("%H:%M:%S"), metadata["PatientName"], metadata["StudyDate"],
+                    metadata["Modality"], metadata["StudyDescription"],
+                ),
+            )
+
+    def _on_received_file_selected(self, _event=None):
+        selection = self.received_tree.selection()
+        if not selection:
+            return
+        file_path = selection[0]  # iid is the full path, set in refresh_received_files
+        self.file_path.set(file_path)
+        self.log(f"Selected received file: {file_path}")
 
     def _run_in_background(self, worker, on_done):
         """Run `worker()` off the Tk thread so associations don't freeze the UI.
@@ -176,6 +284,7 @@ class MainWindow(tk.Frame):
             if error is not None:
                 self.log(f"Receive failed: {error}")
             else:
-                self.log("Receive request completed - check the log/storage folder for incoming files")
+                self.log("Receive request completed")
+                self.refresh_received_files()
 
         self._run_in_background(worker, on_done)

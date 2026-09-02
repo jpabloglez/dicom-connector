@@ -8,9 +8,11 @@ never called network_handler at all. Pure-function/mocked-backend tests
 elsewhere wouldn't have caught that - only exercising the real widget
 wiring does.
 """
+import os
 import tempfile
 import time
 import tkinter as tk
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -62,9 +64,10 @@ def synchronous_background_thread():
 
 
 class FakeNetworkHandler:
-    def __init__(self):
+    def __init__(self, storage_dir):
         self.sent = []
         self.received_study_uids = []
+        self.storage_dir = storage_dir
 
     def send_to_pacs(self, dataset):
         self.sent.append(dataset)
@@ -72,6 +75,37 @@ class FakeNetworkHandler:
 
     def receive_from_pacs(self, study_uid):
         self.received_study_uids.append(study_uid)
+        # Simulate a real receive's side effect: handle_store() writing an
+        # instance into storage_dir. For a real C-MOVE this only happens
+        # (and receive_from_pacs only returns) after all C-STORE
+        # sub-operations have completed - already verified against a live
+        # PACS/Storage SCP elsewhere in this project's test suite.
+        write_fake_instance(self.storage_dir, patient_name="Received^Patient", study_uid=study_uid)
+
+
+def write_fake_instance(storage_dir, patient_name="Test^Patient", study_uid=None, mtime=None):
+    """Write a minimal real DICOM file into storage_dir, as handle_store()
+    would. Returns the written path."""
+    ds = Dataset()
+    ds.SOPClassUID = "1.2.840.10008.5.1.4.1.1.2"
+    ds.SOPInstanceUID = generate_uid()
+    ds.PatientName = patient_name
+    ds.PatientID = "RCV1"
+    ds.Modality = "CT"
+    ds.StudyInstanceUID = study_uid or generate_uid()
+    ds.is_little_endian = True
+    ds.is_implicit_VR = False
+    file_meta = FileMetaDataset()
+    file_meta.MediaStorageSOPClassUID = ds.SOPClassUID
+    file_meta.MediaStorageSOPInstanceUID = ds.SOPInstanceUID
+    file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+    ds.file_meta = file_meta
+
+    path = Path(storage_dir) / f"{ds.SOPInstanceUID}.dcm"
+    ds.save_as(path, write_like_original=False)
+    if mtime is not None:
+        os.utime(path, (mtime, mtime))
+    return path
 
 
 class FakeDbHandler:
@@ -131,11 +165,14 @@ def root():
     r.destroy()
 
 
+ORTHANC_URL = "http://orthanc.example:8042"
+
+
 @pytest.fixture
-def window(root):
-    net = FakeNetworkHandler()
+def window(root, tmp_path):
+    net = FakeNetworkHandler(storage_dir=tmp_path)
     db = FakeDbHandler()
-    win = main_window_mod.MainWindow(root, DicomFileHandler(), net, db, DatasetAnonymizer())
+    win = main_window_mod.MainWindow(root, DicomFileHandler(), net, db, DatasetAnonymizer(), orthanc_url=ORTHANC_URL)
     win.pack(fill=tk.BOTH, expand=True)
     win.net = net
     win.db = db
@@ -238,3 +275,110 @@ def test_preview_opens_populated_image_viewer_for_non_image_file(window, dcm_fil
     window.update()
 
     assert "Failed to preview file" in window.log_text.get("1.0", tk.END)
+
+
+# --- Received Files panel ---
+
+def test_received_files_panel_starts_empty_with_nothing_received(window):
+    assert window.received_tree.get_children("") == ()
+
+
+def test_received_files_panel_lists_files_from_today_only(window, tmp_path):
+    today_path = write_fake_instance(tmp_path, patient_name="Today^Patient")
+    # naive/local to match refresh_received_files()'s own deliberately
+    # naive-local "today" comparison (see main_window.py)
+    yesterday = (datetime.now() - timedelta(days=1)).timestamp()  # noqa: DTZ005
+    write_fake_instance(tmp_path, patient_name="Yesterday^Patient", mtime=yesterday)
+
+    window.refresh_received_files()
+
+    rows = window.received_tree.get_children("")
+    assert rows == (str(today_path),)
+    values = window.received_tree.item(rows[0], "values")
+    assert values[1] == "Today^Patient"
+
+
+def test_refresh_button_command_repopulates_the_list(window, tmp_path):
+    write_fake_instance(tmp_path, patient_name="Manual^Refresh")
+
+    # files already on disk aren't picked up until refresh runs - same
+    # command the Refresh button is wired to
+    assert window.received_tree.get_children("") == ()
+    window.refresh_received_files()
+    assert len(window.received_tree.get_children("")) == 1
+
+
+def test_selecting_a_received_file_populates_file_selection(window, tmp_path):
+    path = write_fake_instance(tmp_path, patient_name="Select^Me")
+    window.refresh_received_files()
+
+    window.received_tree.selection_set(str(path))
+    window.received_tree.event_generate("<<TreeviewSelect>>")
+    window.update()
+
+    assert window.file_path.get() == str(path)
+    assert "Selected received file" in window.log_text.get("1.0", tk.END)
+
+
+def test_selecting_a_received_file_enables_view_tags_and_preview(window, tmp_path):
+    # end-to-end: selection from the panel feeds straight into the same
+    # File Selection flow Browse populates, so View Tags/Preview both work
+    path = write_fake_instance(tmp_path, patient_name="Select^Me")
+    window.refresh_received_files()
+    window.received_tree.selection_set(str(path))
+    window.received_tree.event_generate("<<TreeviewSelect>>")
+    window.update()
+
+    created = {}
+    real_cls = main_window_mod.TagBrowserWindow
+
+    def spy(master, dataset, title="DICOM Tags"):
+        win = real_cls(master, dataset, title)
+        created["win"] = win
+        return win
+
+    with patch.object(main_window_mod, "TagBrowserWindow", spy):
+        window.view_tags()
+        window.update()
+
+    labels = [created["win"].tree.item(row, "text") for row in created["win"].tree.get_children("")]
+    assert "PatientName" in labels
+    created["win"].destroy()
+
+
+def test_receive_from_pacs_auto_refreshes_received_files_panel(window):
+    # the whole point of this feature: no manual Refresh click needed
+    assert window.received_tree.get_children("") == ()
+
+    window.study_uid.set(generate_uid())
+    window.receive_from_pacs()
+
+    assert pump_until(
+        window.winfo_toplevel(),
+        lambda: "Receive request completed" in window.log_text.get("1.0", tk.END),
+    )
+    assert len(window.received_tree.get_children("")) == 1
+
+
+# --- Open Orthanc Studies ---
+
+def test_open_orthanc_explorer_opens_the_studies_app_url(window):
+    with patch.object(main_window_mod.webbrowser, "open", return_value=True) as mock_open:
+        window.open_orthanc_explorer()
+
+    mock_open.assert_called_once_with(f"{ORTHANC_URL}/ui/app/")
+    assert "Opening Orthanc Studies" in window.log_text.get("1.0", tk.END)
+
+
+def test_open_orthanc_explorer_without_configured_url_logs_and_does_not_open(root, tmp_path):
+    net = FakeNetworkHandler(storage_dir=tmp_path)
+    win = main_window_mod.MainWindow(root, DicomFileHandler(), net, FakeDbHandler(), DatasetAnonymizer())
+    win.pack(fill=tk.BOTH, expand=True)
+    try:
+        with patch.object(main_window_mod.webbrowser, "open") as mock_open:
+            win.open_orthanc_explorer()
+
+        mock_open.assert_not_called()
+        assert "Orthanc URL not configured" in win.log_text.get("1.0", tk.END)
+    finally:
+        win.destroy()
