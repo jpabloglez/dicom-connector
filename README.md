@@ -126,6 +126,12 @@ the host network so it can reach the DICOM/PACS ports directly), `db`
 storage). All credentials are environment-variable driven - copy
 `.env.example` to `.env` and change them before any real deployment.
 
+A `Makefile` wraps the common operations - run `make help` for the full
+list (`up`, `detach`, `build`, `rebuild`, `logs[-app|-db|-orthanc]`,
+`restart[-app|-db|-orthanc]`, `shell[-db|-orthanc]`, `ps`, `down`,
+`clean-volumes`, plus `test`/`lint`). `make up`/`make build`/etc. create
+`.env` from `.env.example` automatically if it's missing.
+
 ## Usage
 
 1. Launch the application - it also starts a background Storage SCP
