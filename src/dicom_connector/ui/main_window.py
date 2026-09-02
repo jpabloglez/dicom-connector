@@ -154,8 +154,12 @@ class MainWindow(tk.Frame):
         PacsBrowserWindow(self, self.orthanc_api, on_select=self._on_pacs_study_selected)
 
     def _on_pacs_study_selected(self, study_uid):
+        # Browse exists specifically to pick a study *to receive* - fetch
+        # it immediately rather than making the user notice the UID landed
+        # in the field and separately click Receive from PACS themselves.
         self.study_uid.set(study_uid)
         self.log(f"Selected study for receive: {study_uid}")
+        self.receive_from_pacs()
 
     def refresh_received_files(self):
         """Repopulate the Received Files list from storage_dir, scoped to
@@ -280,5 +284,14 @@ class MainWindow(tk.Frame):
             else:
                 self.log("Receive request completed")
                 self.refresh_received_files()
+                self._select_most_recently_received_file()
 
         self._run_in_background(worker, on_done)
+
+    def _select_most_recently_received_file(self):
+        """Auto-select the newest row in Received Files (refresh_received_files
+        sorts newest-first) so View Tags/Preview/Send are immediately ready
+        against whatever was just received, with no extra click."""
+        rows = self.received_tree.get_children("")
+        if rows:
+            self.received_tree.selection_set(rows[0])  # fires <<TreeviewSelect>> -> sets file_path

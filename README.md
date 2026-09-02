@@ -16,10 +16,12 @@ medical imaging files against a PACS (e.g. Orthanc).
   compressed transfer syntaxes (JPEG, JPEG2000, ...) via pylibjpeg
 - Anonymization before send (on by default), via dicognito
 - Network DICOM transfer: C-ECHO, C-STORE, C-FIND, C-MOVE, and a Storage SCP
-- Auto-refreshing "Received Files (Today)" panel - select a received file
-  to load it straight into View Tags/Preview/Send, no manual browsing
-- In-app PACS browser (Browse next to Receive) to search studies by
-  Patient ID and pick one, no need to already know a Study Instance UID
+- In-app PACS browser (Browse next to Receive) to find a study by Patient
+  ID and receive it in one click - no need to already know a Study
+  Instance UID, and no separate "now click Receive" step
+- Auto-refreshing "Received Files (Today)" panel that auto-selects the
+  just-received file - View Tags/Preview/Send are immediately ready, no
+  manual browsing
 - Orthanc REST API client
 - Database storage for DICOM metadata (PostgreSQL)
 - Tkinter GUI
@@ -144,23 +146,24 @@ list (`up`, `detach`, `build`, `rebuild`, `logs[-app|-db|-orthanc]`,
 2. To send: use **Browse** to select a `.dcm` file, then **Send to PACS**;
    use **View Tags** to inspect its full DICOM dataset, or **Preview** to
    view pixel data with adjustable window center/width sliders
-3. To find a study to receive, click **Browse** next to the Receive field
-   to search studies on the PACS by Patient ID (via Orthanc's REST API);
-   double-click a row, or select it and click **Use Selected**, to fill in
-   its Study Instance UID
-4. To receive: enter that **Study Instance UID** (or use Browse above) and
-   click **Receive from PACS**. This issues a C-MOVE, which only delivers
-   files if the PACS
-   knows this app as a registered DICOM modality pointing at its Storage
-   SCP - the `docker compose` setup does this automatically via
-   `docker/orthanc-config/modalities.json`; a different PACS needs the
-   same registration (AE title, host, `DICOM_STORE_SCP_PORT`) added manually
-5. Received files land in `DICOM_STORAGE_DIR` (default `received_dicom/`)
-   and show up automatically in the **Received Files (Today)** panel -
-   select a row to load it into File Selection, then View Tags/Preview/
-   Send work on it like any other file. The panel only lists files
+3. To receive a study: click **Browse** next to the Receive field to
+   search studies on the PACS by Patient ID (via Orthanc's REST API), then
+   double-click a row (or select it and click **Use Selected**). This
+   issues a C-MOVE right away - no separate step needed - which only
+   delivers files if the PACS knows this app as a registered DICOM
+   modality pointing at its Storage SCP; the `docker compose` setup does
+   this automatically via `docker/orthanc-config/modalities.json`, a
+   different PACS needs the same registration (AE title, host,
+   `DICOM_STORE_SCP_PORT`) added manually. (You can also type a Study
+   Instance UID directly and click **Receive from PACS**, if you already
+   have one.)
+4. Received files land in `DICOM_STORAGE_DIR` (default `received_dicom/`),
+   show up in the **Received Files (Today)** panel, and the just-received
+   file is auto-selected into File Selection - **View Tags**/**Preview**/
+   **Send to PACS** are immediately ready to use on it, no extra clicks.
+   Selecting a different row does the same. The panel only lists files
    received today; use **Refresh** to re-scan the folder manually
-6. Check the log pane for status and errors
+5. Check the log pane for status and errors
 
 ### Utility Scripts
 

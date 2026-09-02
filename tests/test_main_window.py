@@ -385,6 +385,20 @@ def test_receive_from_pacs_auto_refreshes_received_files_panel(window):
     assert len(window.received_tree.get_children("")) == 1
 
 
+def test_receive_from_pacs_auto_selects_the_received_file(window):
+    window.study_uid.set(generate_uid())
+    window.receive_from_pacs()
+
+    assert pump_until(
+        window.winfo_toplevel(),
+        lambda: "Receive request completed" in window.log_text.get("1.0", tk.END),
+    )
+
+    rows = window.received_tree.get_children("")
+    assert window.received_tree.selection() == rows
+    assert window.file_path.get() == rows[0]
+
+
 # --- Browse PACS (find a study by Patient ID) ---
 
 def test_browse_pacs_opens_a_populated_dialog(window):
@@ -428,6 +442,35 @@ def test_browse_pacs_selection_populates_study_uid_for_receive(window):
     assert window.study_uid.get() == "1.1"
     assert "Selected study for receive: 1.1" in window.log_text.get("1.0", tk.END)
     assert not browser.winfo_exists()  # use_selected() closes the dialog
+
+
+def test_browse_pacs_selection_auto_receives_and_auto_selects_the_file(window):
+    # the full point of the feature: Browse -> pick a study -> it's fetched
+    # and selected automatically, with View Tags/Preview/Send immediately
+    # ready - no separate "now click Receive from PACS" step required
+    created = {}
+    real_cls = main_window_mod.PacsBrowserWindow
+
+    def spy(master, orthanc_api, on_select, title="Browse PACS Studies"):
+        win = real_cls(master, orthanc_api, on_select, title)
+        created["win"] = win
+        return win
+
+    with patch.object(main_window_mod, "PacsBrowserWindow", spy):
+        window.browse_pacs()
+        window.update()
+
+    created["win"].tree.selection_set("1.1")
+    created["win"].use_selected()
+
+    assert pump_until(
+        window.winfo_toplevel(),
+        lambda: "Receive request completed" in window.log_text.get("1.0", tk.END),
+    )
+
+    assert len(window.received_tree.get_children("")) == 1
+    assert window.file_path.get() != ""  # auto-selected, ready for View Tags/Preview/Send
+    assert "Selected received file" in window.log_text.get("1.0", tk.END)
 
 
 def test_browse_pacs_without_configured_api_logs_and_does_not_open(root, tmp_path):
