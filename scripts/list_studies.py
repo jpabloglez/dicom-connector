@@ -19,6 +19,7 @@ from rich.table import Table
 
 from dicom_connector import config
 from dicom_connector.dicom.orthanc_api import OrthancAPI
+from dicom_connector.dicom.studies import fetch_studies, matches_patient_filter
 
 console = Console()
 error_console = Console(stderr=True)
@@ -51,31 +52,6 @@ def parse_args(argv=None):
         help="Print raw JSON instead of a table",
     )
     return parser.parse_args(argv)
-
-
-def fetch_studies(api, study_ids):
-    studies = []
-    for study_id in study_ids:
-        details = api.get_study_details(study_id)
-        main_tags = details.get("MainDicomTags", {})
-        patient_tags = details.get("PatientMainDicomTags", {})
-        studies.append({
-            "orthanc_id": study_id,
-            "patient_name": patient_tags.get("PatientName", ""),
-            "patient_id": patient_tags.get("PatientID", ""),
-            "study_date": main_tags.get("StudyDate", ""),
-            "study_description": main_tags.get("StudyDescription", ""),
-            "study_instance_uid": main_tags.get("StudyInstanceUID", ""),
-            "series_count": len(details.get("Series", [])),
-        })
-    return studies
-
-
-def matches_patient_filter(study, needle):
-    if not needle:
-        return True
-    needle = needle.lower()
-    return needle in study["patient_name"].lower() or needle in study["patient_id"].lower()
 
 
 def print_table(studies):

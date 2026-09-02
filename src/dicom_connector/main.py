@@ -8,6 +8,7 @@ from dicom_connector.database.db_handler import DatabaseHandler
 from dicom_connector.dicom.anonymizer import DatasetAnonymizer
 from dicom_connector.dicom.file_handler import DicomFileHandler
 from dicom_connector.dicom.network import DicomNetwork
+from dicom_connector.dicom.orthanc_api import OrthancAPI
 from dicom_connector.ui.main_window import MainWindow
 
 logger = logging.getLogger(__name__)
@@ -48,10 +49,12 @@ def main():
     # consistently across files from the same study/patient.
     anonymizer = DatasetAnonymizer()
 
+    orthanc_api = OrthancAPI()
+
     # Create main window
     main_window = MainWindow(
         root, file_handler, network_handler, db_handler, anonymizer,
-        orthanc_url=config.ORTHANC_HTTP_CONFIG['url'],
+        orthanc_api=orthanc_api,
     )
     main_window.pack(fill=tk.BOTH, expand=True)
 

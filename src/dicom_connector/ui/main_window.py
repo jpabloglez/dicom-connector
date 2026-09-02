@@ -2,24 +2,24 @@
 import logging
 import threading
 import tkinter as tk
-import webbrowser
 from datetime import date, datetime
 from tkinter import filedialog, ttk
 
 from dicom_connector.ui.image_viewer import ImageViewerWindow
+from dicom_connector.ui.pacs_browser import PacsBrowserWindow
 from dicom_connector.ui.tag_browser import TagBrowserWindow
 
 logger = logging.getLogger(__name__)
 
 
 class MainWindow(tk.Frame):
-    def __init__(self, master, file_handler, network_handler, db_handler, anonymizer, orthanc_url=None):
+    def __init__(self, master, file_handler, network_handler, db_handler, anonymizer, orthanc_api=None):
         super().__init__(master)
         self.file_handler = file_handler
         self.network_handler = network_handler
         self.db_handler = db_handler
         self.anonymizer = anonymizer
-        self.orthanc_url = orthanc_url
+        self.orthanc_api = orthanc_api
 
         self.create_widgets()
 
@@ -49,10 +49,10 @@ class MainWindow(tk.Frame):
         self.study_uid_entry = ttk.Entry(self.receive_frame, textvariable=self.study_uid, width=50)
         self.study_uid_entry.pack(side=tk.LEFT, padx=5, pady=5)
 
-        self.open_orthanc_button = ttk.Button(
-            self.receive_frame, text="Open Orthanc Studies", command=self.open_orthanc_explorer,
+        self.browse_pacs_button = ttk.Button(
+            self.receive_frame, text="Browse", command=self.browse_pacs,
         )
-        self.open_orthanc_button.pack(side=tk.LEFT, padx=5, pady=5)
+        self.browse_pacs_button.pack(side=tk.LEFT, padx=5, pady=5)
 
         # Transmission buttons
         self.button_frame = ttk.Frame(self)
@@ -146,22 +146,16 @@ class MainWindow(tk.Frame):
         except Exception as exc:
             self.log(f"Failed to preview file: {exc}")
 
-    def open_orthanc_explorer(self):
-        if not self.orthanc_url:
-            self.log("Orthanc URL not configured")
+    def browse_pacs(self):
+        if not self.orthanc_api:
+            self.log("Orthanc API not configured")
             return
 
-        url = f"{self.orthanc_url.rstrip('/')}/ui/app/"
-        try:
-            opened = webbrowser.open(url)
-        except Exception as exc:
-            self.log(f"Failed to open browser: {exc}")
-            return
+        PacsBrowserWindow(self, self.orthanc_api, on_select=self._on_pacs_study_selected)
 
-        if opened:
-            self.log(f"Opening Orthanc Studies in browser: {url}")
-        else:
-            self.log(f"Could not open a browser automatically - open manually: {url}")
+    def _on_pacs_study_selected(self, study_uid):
+        self.study_uid.set(study_uid)
+        self.log(f"Selected study for receive: {study_uid}")
 
     def refresh_received_files(self):
         """Repopulate the Received Files list from storage_dir, scoped to

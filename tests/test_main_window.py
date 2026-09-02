@@ -116,6 +116,27 @@ class FakeDbHandler:
         self.records.append(metadata)
 
 
+class FakeOrthancAPI:
+    """Duck-types OrthancAPI's two methods that dicom_connector.dicom.studies
+    calls, matching FakeOrthancAPI in test_studies.py."""
+    def __init__(self, studies_by_id):
+        self._studies_by_id = studies_by_id
+
+    def get_studies(self):
+        return list(self._studies_by_id.keys())
+
+    def get_study_details(self, study_id):
+        return self._studies_by_id[study_id]
+
+
+def make_study_details(patient_name, patient_id, uid):
+    return {
+        "MainDicomTags": {"StudyDate": "20240101", "StudyDescription": "Chest", "StudyInstanceUID": uid},
+        "PatientMainDicomTags": {"PatientName": patient_name, "PatientID": patient_id},
+        "Series": ["s1"],
+    }
+
+
 def pump_until(root, condition, timeout=5.0):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -165,17 +186,21 @@ def root():
     r.destroy()
 
 
-ORTHANC_URL = "http://orthanc.example:8042"
-
-
 @pytest.fixture
 def window(root, tmp_path):
     net = FakeNetworkHandler(storage_dir=tmp_path)
     db = FakeDbHandler()
-    win = main_window_mod.MainWindow(root, DicomFileHandler(), net, db, DatasetAnonymizer(), orthanc_url=ORTHANC_URL)
+    orthanc_api = FakeOrthancAPI({
+        "id-1": make_study_details("Doe^John", "P1", "1.1"),
+        "id-2": make_study_details("Smith^Jane", "P2", "1.2"),
+    })
+    win = main_window_mod.MainWindow(
+        root, DicomFileHandler(), net, db, DatasetAnonymizer(), orthanc_api=orthanc_api,
+    )
     win.pack(fill=tk.BOTH, expand=True)
     win.net = net
     win.db = db
+    win.fake_orthanc_api = orthanc_api
     yield win
     root.update()  # flush any trailing Tcl idle callbacks before teardown
     win.destroy()
@@ -360,25 +385,60 @@ def test_receive_from_pacs_auto_refreshes_received_files_panel(window):
     assert len(window.received_tree.get_children("")) == 1
 
 
-# --- Open Orthanc Studies ---
+# --- Browse PACS (find a study by Patient ID) ---
 
-def test_open_orthanc_explorer_opens_the_studies_app_url(window):
-    with patch.object(main_window_mod.webbrowser, "open", return_value=True) as mock_open:
-        window.open_orthanc_explorer()
+def test_browse_pacs_opens_a_populated_dialog(window):
+    created = {}
+    real_cls = main_window_mod.PacsBrowserWindow
 
-    mock_open.assert_called_once_with(f"{ORTHANC_URL}/ui/app/")
-    assert "Opening Orthanc Studies" in window.log_text.get("1.0", tk.END)
+    def spy(master, orthanc_api, on_select, title="Browse PACS Studies"):
+        win = real_cls(master, orthanc_api, on_select, title)
+        created["win"] = win
+        return win
+
+    with patch.object(main_window_mod, "PacsBrowserWindow", spy):
+        window.browse_pacs()
+        window.update()
+
+    browser = created["win"]
+    rows = browser.tree.get_children("")
+    assert len(rows) == 2
+    assert set(rows) == {"1.1", "1.2"}
+    browser.destroy()
 
 
-def test_open_orthanc_explorer_without_configured_url_logs_and_does_not_open(root, tmp_path):
+def test_browse_pacs_selection_populates_study_uid_for_receive(window):
+    created = {}
+    real_cls = main_window_mod.PacsBrowserWindow
+
+    def spy(master, orthanc_api, on_select, title="Browse PACS Studies"):
+        win = real_cls(master, orthanc_api, on_select, title)
+        created["win"] = win
+        return win
+
+    with patch.object(main_window_mod, "PacsBrowserWindow", spy):
+        window.browse_pacs()
+        window.update()
+
+    browser = created["win"]
+    browser.tree.selection_set("1.1")
+    browser.use_selected()
+    window.update()
+
+    assert window.study_uid.get() == "1.1"
+    assert "Selected study for receive: 1.1" in window.log_text.get("1.0", tk.END)
+    assert not browser.winfo_exists()  # use_selected() closes the dialog
+
+
+def test_browse_pacs_without_configured_api_logs_and_does_not_open(root, tmp_path):
     net = FakeNetworkHandler(storage_dir=tmp_path)
     win = main_window_mod.MainWindow(root, DicomFileHandler(), net, FakeDbHandler(), DatasetAnonymizer())
     win.pack(fill=tk.BOTH, expand=True)
     try:
-        with patch.object(main_window_mod.webbrowser, "open") as mock_open:
-            win.open_orthanc_explorer()
+        with patch.object(main_window_mod, "PacsBrowserWindow") as mock_cls:
+            win.browse_pacs()
 
-        mock_open.assert_not_called()
-        assert "Orthanc URL not configured" in win.log_text.get("1.0", tk.END)
+        mock_cls.assert_not_called()
+        assert "Orthanc API not configured" in win.log_text.get("1.0", tk.END)
     finally:
         win.destroy()
