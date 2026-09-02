@@ -34,26 +34,33 @@ Pixel preview limitation (MVP): only the first frame of multi-frame data.
 connector/
 ├── Dockerfile
 ├── docker-compose.yml
+├── Makefile
 ├── pyproject.toml
 ├── uv.lock
+├── docker/
+│   ├── orthanc-config/modalities.json   # registers dicom_app as a PACS modality
+│   └── postgres-init/init-orthanc-db.sh # creates orthanc's own database
+├── scripts/
+│   ├── list_studies.py                  # CLI: list/filter studies on Orthanc
+│   └── anonymize.py                     # CLI: batch-anonymize local files
 ├── src/
 │   └── dicom_connector/
 │       ├── main.py
 │       ├── config.py
 │       ├── ui/
-│       │   ├── __init__.py
-│       │   └── main_window.py
+│       │   ├── main_window.py
+│       │   ├── tag_browser.py           # View Tags
+│       │   ├── image_viewer.py          # Preview
+│       │   └── pacs_browser.py          # Browse (find a study by Patient ID)
 │       ├── dicom/
-│       │   ├── __init__.py
 │       │   ├── file_handler.py
-│       │   ├── network.py
-│       │   └── orthanc_api.py
+│       │   ├── network.py               # C-ECHO/C-STORE/C-FIND/C-MOVE, Storage SCP
+│       │   ├── orthanc_api.py           # Orthanc REST client
+│       │   ├── studies.py               # study summarizing/filtering, shared by the CLI and Browse
+│       │   └── anonymizer.py            # wraps dicognito
 │       └── database/
-│           ├── __init__.py
 │           └── db_handler.py
 └── tests/
-    ├── __init__.py
-    └── test_orthanc_connection.py
 ```
 
 ## Prerequisites
@@ -167,6 +174,26 @@ smith"` to filter, `ARGS="--json"` for scripting, etc.).
    received today; use **Refresh** to re-scan the folder manually
 5. Check the log pane for status and errors
 
+### Screenshots
+
+**Main window** - File Selection (Browse/View Tags/Preview), Receive
+(Browse to find a study by Patient ID), Send/Anonymize, the Received
+Files panel, and the log:
+
+![Main window](docs/screenshots/main_window.png)
+
+**View Tags** - the full DICOM dataset, including nested sequences:
+
+![Tag browser](docs/screenshots/tag_browser.png)
+
+**Preview** - pixel data with adjustable window center/width sliders:
+
+![Image preview](docs/screenshots/image_preview.png)
+
+**Browse** - find a study on the PACS by Patient ID:
+
+![PACS browser](docs/screenshots/pacs_browser.png)
+
 ### Utility Scripts
 
 ```bash
@@ -204,7 +231,8 @@ the real Tk widgets and skips cleanly wherever no display is available.
 ### Linting
 
 ```bash
-uv run ruff check src tests
+uv run ruff check src tests scripts
+# or: make lint
 ```
 
 ## Contributing
